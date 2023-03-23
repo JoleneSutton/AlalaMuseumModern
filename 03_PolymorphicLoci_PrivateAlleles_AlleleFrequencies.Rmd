@@ -1,0 +1,731 @@
+---
+title: "Blanchet *et al.* 2023, Genotypes file, Exercise 3, Polymorphic loci & private alleles"
+date: "Updated: `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: kable
+    number_sections: no
+---
+
+*******************************************************************
+# Libraries
+```{r libraries,message=FALSE,warning=FALSE}
+library('data.table')
+library('DescTools')
+library('dplyr')
+library('gdata')
+library('adegenet')
+library('hierfstat')
+library('car')
+```
+
+********************************************************************
+# Get data
+```{r echo = T, results = 'show',eval=T}
+df <- read.table("data_reformatted/May2022DataFormattedMaxMissing.csv", header=TRUE, sep=",", stringsAsFactors=FALSE,na.strings="NA")
+df[1:3,1:5]
+str(df[,1:5]) #check structure
+cols <- c("Bird", "Group") #want Bird and Group to be factors
+df[cols] <- lapply(df[cols], factor)
+str(df[,1:5])
+```
+
+```{r echo = T, results = 'show',eval=T}
+knitr::kable(df[,1:10],caption = 'Showing all rows and 10 columns')
+```
+
+```{r echo = F, results = 'hide'}
+# Create vectors for later use
+modern.vec<-which(df$Group=="Modern")
+museum.vec<-which(df$Group=="Historical")
+num.modern<-length(modern.vec)
+num.museum<-length(museum.vec)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r format(ncol(df)-2,scientific=F,big.mark=",")` loci, and `r format(nrow(df),scientific = F,big.mark=",")` birds. There are `r num.museum` Historical samples, and `r num.modern` Modern samples. Note that information about missing data per bird and per locus is contained in a previous exercise.
+</div>
+
+********************************************************************
+# Polymorphic loci per group
+The way that I did this was to look for multiple *genotypes* per locus. So, if every individual in a population was heterozygous (*i.e.* 2 alleles but all genotypes the same) then I treated the *locus* as monomorphic. 
+
+## Not accounting for different sample sizes
+```{r echo = T, results = 'hide'}
+### First, break down components that I will use later in a loop
+x<-df
+table(x$Group)
+num.poly.loci<-ncol(x)-2
+
+### Separate historical and modern populations:
+mus = subset (x, x$Group == "Historical") #subset by group
+mod = subset (x, x$Group == "Modern") #subset by group
+mus = mus[,3:ncol(mus)] #restrict columns to only include genotypes
+mod = mod[,3:ncol(mod)] #restrict columns to only include genotypes
+mus<-droplevels(mus)
+mod<-droplevels(mod)
+
+a<-apply(mus, 2, function(x)length(unique(na.omit(x))))#how many unique genotypes per column
+b<-apply(mod, 2, function(x)length(unique(na.omit(x))))#how many unique genotypes per column
+
+length(which(a>1))#how many columns with more than 1 value
+length(which(b>1))#how many columns with more than 1 value
+length(which(a==1))#how many columns with exactly 1 value
+length(which(b==1))#how many columns with exactly 1 value
+
+Museum.poly1<-length(which(a>1))/(ncol(df)-2) #Museum
+Modern.poly1<-length(which(b>1))/(ncol(df)-2) #Modern
+
+Museum.poly1 #Museum
+Modern.poly1 #Modern
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**:    
+
+  * The number of simulations used: zero
+  * Museum proportion of polymorphic loci: `r Museum.poly1`
+  * Modern proportion of polymorphic loci: `r Modern.poly1`
+</div>
+
+*******************************************************************
+## Accounting for different sample sizes
+Each simulation will sample `r num.museum` museum (*i.e.* all museum) and `r num.museum` modern samples. The first code chunk specifies the number of simulations to run. The more simulations, the longer it will take. The second code chunk runs the simulations.
+```{r echo = T, results = 'show'}
+n.sims<-1000 # number of simulations to run
+```
+   
+```{r echo = T, results = 'hide'}
+#See this code: x[sample(nrow(x), 13), ] #sample 13 random rows #https://stackoverflow.com/questions/8273313/sample-random-rows-in-dataframe
+
+x<-df
+N.pops <- length(unique(x$Group))
+n.sims <- n.sims # number of simulations to run
+N.sample<-length(museum.vec) # number of samples to take from each group during each permutation
+TotalPolymorphic <- array(NA, c(n.sims, N.pops)) #to record output
+simulated<-x
+
+set.seed(2456)
+for (n in 1:n.sims){ # for each permutation
+  mus = subset (x, x$Group == "Historical") #subset by group
+  mod = subset (x, x$Group == "Modern") #subset by group  
+
+  mus2<-mus[sample(nrow(mus), N.sample), ] #sample x random rows
+  mod2<-mod[sample(nrow(mod), N.sample), ] #sample x random rows
+  
+  mus2<-mus2[,3:ncol(mus2)]
+  mod2<-mod2[,3:ncol(mod2)]
+  
+  mus2<-droplevels(mus2)
+  mod2<-droplevels(mod2)
+  
+  a<-apply(mus2, 2, function(x)length(unique(na.omit(x))))#how many unique values per column
+  b<-apply(mod2, 2, function(x)length(unique(na.omit(x))))#how many unique values per column
+
+  length(which(a>1))#how many columns with more than 1 value
+  length(which(b>1))#how many columns with more than 1 value
+  length(which(a==1))#how many columns with exactly 1 value
+  length(which(b==1))#how many columns with exactly 1 value
+  
+  percent.poly.museum<-length(which(a>1))/( length(which(a>1)) + length(which(a<2)) )
+  percent.poly.modern<-length(which(b>1))/( length(which(b>1)) + length(which(b<2)) )
+  
+  TotalPolymorphic[n, 1]<-percent.poly.museum
+  TotalPolymorphic[n, 2]<-percent.poly.modern
+}
+TotalPolymorphic<-as.data.frame(TotalPolymorphic)
+names(TotalPolymorphic)<-c("musem","modern")
+head(TotalPolymorphic)
+
+####### Mean and 95% CIs for each group
+#mean and 95% CI for one group (Museum)
+mean(TotalPolymorphic[,1])
+quantile(TotalPolymorphic[,1], c(0.025, 0.975))
+
+#mean and 95% CI for other group (Modern)
+mean(TotalPolymorphic[,2])
+quantile(TotalPolymorphic[,2], c(0.025, 0.975))
+# compare these values to actual data
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**:    
+
+  * The number of simulations used: `r n.sims`
+  * Historical results were: 
+      * Mean: `r mean(TotalPolymorphic[,1])`
+      * 95% CIs: `r quantile(TotalPolymorphic[,1], c(0.025, 0.975))`
+  * Modern results were:
+    * mean: `r mean(TotalPolymorphic[,2])`
+    * 95% CIs: `r quantile(TotalPolymorphic[,2], c(0.025, 0.975))`
+  * Note that museum output should be exact match to unsimulated output from above and that the lower and upper confidence intervals should be the same.
+</div>
+
+********************************************************************
+# Private alleles
+## Ignoring differences in sample sizes
+#### 1) Change NA cells to "NN" so that we don't create nucleotides when we split genotypes alleles into separate columns
+```{r echo = T, results = 'hold'}
+df[1:5,1:3]
+x<-df
+x[is.na(x)] <- "NN"
+x[1:5,1:3]
+```
+
+#### 2) Split genotypes into different columns
+```{r echo = T, results = 'hide'}
+x2<-x[,3:ncol(x)]
+x3<-do.call(cbind, 
+        lapply(x2, 
+               function(i) do.call(rbind, strsplit(as.character(i), split=''))
+        )
+)
+```
+
+#### 3) Put table back together
+```{r echo = T, results = 'show'}
+x3[1:5,1:4]
+x4<-as.data.frame(x3)
+new.names<-rbind(paste(rep(names(x2),each=2),"_",sep=""))
+colnames(x4)<-new.names
+x4[1:5,1:4]
+
+out<-x4
+out[] <- Map(paste, names(out), out, sep = '')
+out[] <- lapply(out, function(x) replace(x, grep("_N", x), NA))
+
+#out[] <- lapply(out, function(x) replace(x, grep("NA", x), NA))
+out[1:4,1:6]
+
+x5<-cbind(x[,1:2],out)
+x5[1:3,1:4]
+```
+
+#### 4) Compare private alleles
+```{r echo = T, results = 'show'}
+x3<-as.data.frame(x5)
+#how many unique alleles in entire dataset?
+count<-(unique(unlist(x3[,3:ncol(x3)])))
+total.alleles<-length(count[!is.na(count)])
+ncol(x)-2 # loci
+num.loci<-ncol(x)-2
+
+mus = subset (x3, x3$Group == "Historical") #subset by group
+mod = subset (x3, x3$Group == "Modern") #subset by group
+mus<-droplevels(mus)
+mod<-droplevels(mod)
+mus.alleles<-(unique(unlist(mus[,3:ncol(mus)])))
+mod.alleles<-(unique(unlist(mod[,3:ncol(mus)])))
+
+mus.alleles<-mus.alleles[!is.na(mus.alleles)]
+mod.alleles<-mod.alleles[!is.na(mod.alleles)]
+
+private.museum.not.permuted<-length(which(!match(mus.alleles,mod.alleles,nomatch = 0))) #which museum alleles not found in modern
+private.modern.not.permuted<-length(which(!match(mod.alleles,mus.alleles,nomatch = 0))) #which modern alleles not found in museum
+
+total.alleles
+private.museum.not.permuted
+private.modern.not.permuted
+private.museum.not.permuted/total.alleles #proportion private to museum
+private.modern.not.permuted/total.alleles #proportion private to modern
+(total.alleles-private.museum.not.permuted-private.modern.not.permuted)/total.alleles #proporation shared
+
+```
+
+
+<span style="color: red;">**Results: ** </span> 
+
+  * The number of simulations used: zero
+  * Total alleles: `r total.alleles`
+  * Number of alleles in museum that are not found in modern: `r private.museum.not.permuted`
+  * Number of alleles in modern that are not found in museum: `r private.modern.not.permuted`
+  * Proportion of alleles private to museum: `r private.museum.not.permuted/total.alleles`
+  * Proportion of alleles private to modern: `r private.modern.not.permuted/total.alleles`
+  * Proportion of shared alleles: `r (total.alleles-private.museum.not.permuted-private.modern.not.permuted)/total.alleles`
+
+#### 5) How many private to single bird
+```{r echo = T, results = 'show',eval=T}
+# create function
+f_PrivateToOneBird<-function(DATA){
+  startcols<-seq(3,ncol(DATA)-2,by=2)
+  private=0
+  for(i in 1:length(startcols)){
+    dat<-DATA[,c(1:2,startcols[i],startcols[i]+1)]
+    count=length(which(grepl('^1$',table(unlist(dat[,3:4])))%in%TRUE))
+    private=private+count
+  }
+  return(private)
+}
+
+# museum samples
+tmp<-x3[which(x3$Group%in%'Historical'),c(1,2,3:ncol(x3))]
+(tot<-length(which(table(unlist(tmp[,3:ncol(tmp)]))>0)))
+(priv<-f_PrivateToOneBird(tmp))
+priv/tot
+
+#modern samples
+tmp<-x3[which(x3$Group%in%'Modern'),c(1,2,3:ncol(x3))]
+(tot<-length(which(table(unlist(tmp[,3:ncol(tmp)]))>0)))
+(priv<-f_PrivateToOneBird(tmp))
+priv/tot
+```
+
+## Accounting for differences in sample sizes
+Each simulation sampled `r num.museum` museum (i.e. all museum) and `r num.museum` modern samples.
+```{r echo = T, results = 'hide'}
+####################
+#################### Now with a loop for permutation (really just need to re-sample moderns)
+####################
+n.sims<-n.sims
+PrivateAlleles <- array(NA, c(n.sims, 4)) #to record output
+#mus[1:3,1:4]
+#mod[1:3,1:4]
+set.seed(2456)
+for (n in 1:n.sims){ # for each permutation
+  mod2<-mod[sample(nrow(mod), num.museum), ] #sample x random rows
+  
+  mus.alleles<-(unique(unlist(mus[,3:ncol(mus)])))
+  mod.alleles<-(unique(unlist(mod2[,3:ncol(mus)])))
+  
+  mus.alleles2<-mus.alleles[!is.na(mus.alleles)]
+  mod.alleles2<-mod.alleles[!is.na(mod.alleles)]
+  
+  PrivateAlleles[n,1]<-length(which(!match(mus.alleles,mod.alleles,nomatch = 0))) #which museum alleles not found in modern
+  PrivateAlleles[n,2]<-length(which(!match(mod.alleles,mus.alleles,nomatch = 0))) #which modern alleles not found in museum
+  PrivateAlleles[n,3]<-PrivateAlleles[n,1]/total.alleles
+  PrivateAlleles[n,4]<-PrivateAlleles[n,2]/total.alleles
+  }
+PrivateAlleles<-as.data.frame(PrivateAlleles)
+names(PrivateAlleles)<-c("museum","modern","museum.prop","modern.prop")
+#head(PrivateAlleles)
+
+### Mean and 95% CIs for each group
+n.sims
+
+#mean and 95% CI for museum
+mean(PrivateAlleles[,3])
+quantile(PrivateAlleles[,3], c(0.025, 0.975))
+#mean and 95% CI for other group
+mean(PrivateAlleles[,4])
+quantile(PrivateAlleles[,4], c(0.025, 0.975))
+# compare these values to actual data
+```
+<span style="color: red;">**Results: ** </span>  
+
+  * The number of simulations used: `r n.sims`
+  * Museum results were: 
+      * Mean: `r mean(PrivateAlleles[,3])`
+      * 95% CIs: `r quantile(PrivateAlleles[,3], c(0.025, 0.975))`
+  * Modern results were:
+    * mean: `r mean(PrivateAlleles[,4])`
+    * 95% CIs: `r quantile(PrivateAlleles[,4], c(0.025, 0.975))`
+
+
+
+<span style="color:red; font-size:2em;"> **MANUSCRIPT TEXT** </span>  
+<br>
+<style>
+```{r echo = F, results = 'hide'}
+# code to generate output below
+a<-PrivateAlleles[,3]
+b<-PrivateAlleles[,4]
+
+overlaps<-quantile(a, c(0.025, 0.975))%overlaps%quantile(b, c(0.025, 0.975))
+overlaps
+
+condition1<-mean(a)>mean(b) & overlaps!=TRUE
+condition2<-mean(a)<mean(b) & overlaps!=TRUE
+condition3<-quantile(a, c(0.025, 0.975))%overlaps%quantile(b, c(0.025, 0.975))
+condition1
+condition2
+condition3
+
+p1<-print("was significantly greater than the proportion in")
+p2<-print("was significantly less than the proportion in")
+p3<-print("was no different than the proportion in")
+
+ifelse(condition1=="TRUE", p1, ifelse(condition2=="TRUE", p2, p3))
+```
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+*Private alleles methods*    
+To assess bottleneck impacts, we compared diversity metrics between museum and modern samples. When comparing proportions of polymorphic loci and private alleles, we used permutations to address differences between museum and modern sample sizes. We randomly sampled `r length(museum.vec)` modern birds for `r n.sims` permutations to generate means and 95% confidence intervals, and compared these values to our `r length(museum.vec)` museum samples. If there was no overlap between the modern samples' permuted 95% confidence intervals and the museum estimates, we considered the values to be significantly different from one another.
+
+*Private alleles results*  
+A total of `r format(total.alleles,big.mark=",",scientific = F)`  alleles were retained from `r format(num.loci,big.mark=",",scientific = F)` loci, of which `r format(total.alleles-private.museum.not.permuted-private.modern.not.permuted,big.mark=",",scientific = F)` (`r ((total.alleles-private.museum.not.permuted-private.modern.not.permuted)/total.alleles)*100`%) were shared between museum and modern samples. When we accounted for sample size differences, the mean proportion of private alleles in our `r length(museum.vec)` museum samples `r ifelse(condition1=="TRUE", p1, ifelse(condition2=="TRUE", p2, p3))` `r length(museum.vec)` randomly sampled modern birds after `r n.sims` permutations (museum: mean = `r mean(PrivateAlleles[,3])`, 95% CIs = `r quantile(PrivateAlleles[,3], c(0.025, 0.975))`; modern: mean =`r mean(PrivateAlleles[,4])`, 95% CIs = `r quantile(PrivateAlleles[,4], c(0.025, 0.975))`).
+</div>
+
+********************************************************************
+# Allele frequencies
+Using K Chan's code: https://github.com/ekfchan/evachan.org-Rscripts/blob/master/rscripts/geno_to_allelecnt.R. I last accessed functions from this GitHub around early November 2019.   
+
+## Transpose dataframe to match K Chan's
+```{r echo = T, results = 'show'}
+x<-df[,-c(1:2)] #only work with the genotype columns
+rownames(x)<-paste(df$Group,df$Bird,sep="_")
+df[1:3,1:4]
+x[1:3,1:4]
+geno<-t(x[,1:ncol(x)]) #now columns are birds and rows are loci
+geno<-as.matrix(geno)
+nrow(geno) # checking # loci
+ncol(geno) # checking # birds
+geno[1:5,1:3]
+```
+
+## Format file as per K Chan
+I used Chan's function, `geno_to_allelecnt` to change the genotype codes from letters to "2","1", and "0". 
+```{r echo = T, results = 'show'}
+geno_to_allelecnt <- function(geno, ref=NULL) {
+if(!is.matrix(geno) | !mode(geno)=="character") { stop("geno must be of 'matrix' class and 'character' mode.\n") }
+if( !all(nchar(as.character(geno[!is.na(geno)]))==2) ) { stop("geno should contain bi-allelic genotypes, e.g. {AA,CC,GG,TT,AC,AG,AT,CG,CT,GT}\n") }
+
+markers <- data.frame( N=rowSums(!is.na(geno)) ) 
+
+alleles <- apply(cbind(substr(geno,1,1),substr(geno,2,2)),1,unique) 
+if( is.matrix(alleles) ) { alleles <- lapply(apply(alleles,2,as.list),as.character) }	#2017-03-15: corrected apply direction
+alleles <- lapply(alleles,sort)
+markers$numAlleles = sapply(alleles,length)
+if( any(markers$numAlleles>2) ) { stop("markers {",paste(which(markers$numAlleles>2),collapse=","),"} contains more than two alleles.\n") }
+
+markers$A1 = NA
+inds <- which(markers$numAlleles>0)
+markers$A1[inds] <- sapply(alleles[inds],'[[',1)
+markers$A2 = NA
+inds <- which(markers$numAlleles>1)
+markers$A2[inds] <- sapply(alleles[inds],'[[',2)
+
+if(is.null(ref)) { ref <- markers$A1 }
+alt <- NA
+inds <- which(ref==markers$A1); alt[inds] <- markers$A2[inds]
+inds <- which(ref==markers$A2); alt[inds] <- markers$A1[inds]
+
+if( any(ref!=markers$A1 & ref!=markers$A2) ) { warning("ref allele not present in geno for some markers. Conversions for these markers cannot be performed and will be coerced to NA.\n") }
+
+markers$G2 = paste(ref,ref,sep="")	#2 copies of ref
+markers$G1.1 = paste(ref,alt,sep="")	#1 copy of ref, ref allele coded first
+markers$G1.2 = paste(alt,ref,sep="")	#1 copy of ref, reversed coding
+markers$G0 = paste(alt,alt,sep="")	#0 copy of ref
+markers$G2[is.na(ref)] <- NA
+markers$G1.1[is.na(alt)] <- NA
+markers$G1.2[is.na(alt)] <- NA
+markers$G0[is.na(alt)] <- NA
+
+geno.as.num <- matrix( NA, ncol=ncol(geno), nrow=nrow(geno), dimnames=dimnames(geno) )
+geno.as.num[geno==markers$G2] <- 2 
+geno.as.num[geno==markers$G1.1 | geno==markers$G1.2] <- 1
+geno.as.num[geno==markers$G0] <- 0
+
+geno.as.num
+}
+```
+
+```{r echo = T, results = 'show'}
+geno2<-geno_to_allelecnt(geno)
+knitr::kable(geno[1:10,1:4],align="l",caption = 'Before applying function `geno_to_allelecnt`')
+knitr::kable(geno2[1:10,1:4],align="l",caption = 'After applying function `geno_to_allelecnt`')
+```
+
+
+## Finish up analysis
+I followed the code that K Chan used to create the function `calc_snp_stats`. I show the output of applying the function to the object `geno2` (created above).
+```{r echo = T, results = 'show'}
+calc_snp_stats <- function(geno)
+{
+  ## Eva KF Chan
+  ## http://evachan.org
+  ##
+  ## Created: 21/08/07
+  ## Last Modified: 21/10/12
+  ##
+  ## Function to calculate basic stats on SNPs, including: allele frequency, MAF, and exact estimate of HWE
+  ##
+  ## geno: snp-by-individual matrix of genotypes, {0,1,2}.
+  ##       NOTE:: any other values are ignored
+  ##
+  ## OUTPUT: data.frame of 
+  ##         n, n0, n1, n2: number of samples with total non-missing genotype, and geno=0,1,or 2
+  ##         p: allele frequency
+  ##         maf & mgf: minor allele & genotype frequencies
+  ##         mono: {T,F} indicating if marker is monomorphic (MAF<0%)
+  ##         loh: {T,F} indicating if marker has loss of heterozygote
+  ##         hwe.chisq & hwe.chisq.p: chi-square test statistic for deviation from HWE and correp p-value
+  ##         hwe.fisher & hwe.fisher.p: Fisher's Exact test statistic for deviation from HWE and correp p-value
+  ##
+  
+  m <- nrow(geno)     ## number of snps
+  n <- ncol(geno)     ## number of individuals
+  
+  ## assign all non {0,1,2} to NA
+  geno[(geno!=0) & (geno!=1) & (geno!=2)] <- NA
+  geno <- as.matrix(geno)
+  
+  ## calc_n
+  n0 <- apply(geno==0,1,sum,na.rm=T)
+  n1 <- apply(geno==1,1,sum,na.rm=T)
+  n2 <- apply(geno==2,1,sum,na.rm=T)
+  
+  n <- n0 + n1 + n2
+  
+  ## calculate allele frequencies
+  p <- ((2*n0)+n1)/(2*n)
+  q <- 1 - p
+  maf <- pmin(p, q)
+  mgf <- apply(cbind(n0,n1,n2),1,min) / n
+  
+  ## HWE: Chi-Square test
+  obs <- cbind(n0=n0,n1=n1,n2=n2)
+  exp <- cbind(p*p, 2*p*q, q*q)
+  exp <- exp*n
+  chisq <- (obs-exp)
+  chisq <- (chisq*chisq) /exp
+  hwe.chisq <- apply(chisq,1,sum)
+  hwe.chisq.p <- 1-pchisq(hwe.chisq,df=1)
+  
+  ## HWE: Fisher's Exact test
+  z <- cbind(n0, ceiling(n1/2), floor(n1/2), n2)
+  z <- lapply( split( z, 1:nrow(z) ), matrix, ncol=2 )
+  z <- lapply( z, fisher.test )
+  hwe.fisher <- as.numeric(unlist(lapply(z, "[[", "estimate")))
+  hwe.fisher.p <- as.numeric(unlist(lapply(z, "[[", "p.value")))
+  
+  # MODIFIED 21 Oct 2012:  prior to this version, we had "mono=(mgf<0)" instead of "mono<(maf<0)"
+  res <- data.frame( n=n, n0=n0, n1=n1, n2=n2, p=p, maf=maf, mgf=mgf,
+                     mono=(maf<=0), loh=(n1<=0), 
+                     hwe.chisq=hwe.chisq, hwe.chisq.p=hwe.chisq.p,
+                     hwe.fisher=hwe.fisher, hwe.fisher.p=hwe.fisher.p, 
+                     stringsAsFactors=F )
+  row.names(res) <- row.names(geno)
+  res
+}
+#head(calc_snp_stats(geno2[,c(modern.vec)]) [5]) #modern samples 
+#head(calc_snp_stats(geno2[,c(museum.vec)]) [5]) #museum samples
+```
+
+```{r echo = T, results = 'show'}
+x<-as.data.frame(cbind(calc_snp_stats(geno2[,c(modern.vec)]) [5] ,  calc_snp_stats(geno2[,c(museum.vec)]) [5]))
+#str(x)
+names(x)<-c("Modern.p","Historical.p")
+#head(x)
+knitr::kable(head(x), digits = 4,caption = 'Allele frequencies by locus for each group (showing only first six rows)')
+```
+
+## Plot (optional)
+```{r echo = T, results = 'show'}
+par(mar = c(4.5,4.5,3,3))
+scatterplot(x$Modern.p~x$Historical.p, boxplots=F,
+            xlab="Historical", ylab="Modern", col=1,
+            main="",las=1,regLine=FALSE,#smooth=TRUE,
+            smooth=list(smoother=loessLine, lty=1,
+                       lty.var=2,col.var=2,lwd.var=0,
+                       col.smooth=2,lty.smooth=1))
+``` 
+ 
+## Spearman correlation test
+```{r echo = T, results = 'show'}
+(modelspear<-cor.test(x$Modern.p,x$Historical.p,method="spearman" ) )
+``` 
+ 
+# Heterozygosity across loci
+
+## Following K Chan - complete
+I followed the code for creating Chan's function, `calc_neiFis_multispop`: A script to calculate inbreeding coefficients, Fis (Nei 1977 Ann Hum Genet 41:225-233), for each sub-population from a given set of SNP markers. See: https://github.com/ekfchan/evachan.org-Rscripts/blob/master/rscripts/calc_neiFis_multispop.R <br/>
+
+After creating the function `calc_neiFis_multispop`, I applied it to the object, `geno2` (`geno2` was created above). Heterozygosity appears to be calculated per locus (not per individual).
+
+**Output (I modified slightly):**
+
+  * list(aveloc = ncFis, HOBS = Hobs, HEXP=Hexp, perloc = ncFis.perloc,FIS=Fis.perloc)
+  * **aveloc**: numeric vector of Fis averaged over all loci for each sub-population, the total population (2nd last value),and average of total population (last value)
+  * **perloc**: matrix of Fis per SNP (row) for each sub-population, the total population (2nd last column),and average of total population (last column)
+  
+Double-check `geno2` for missing data.  
+```{r echo = T, results = 'hide'}
+sapply(as.data.frame(geno2), function(x) sum(is.na(x))) # per column (bird)
+apply(as.data.frame(geno2), MARGIN = 1, function(x) sum(is.na(x))) # per row (locus)
+sum(apply(as.data.frame(geno2), MARGIN = 1, function(x) sum(is.na(x)))) 
+```
+  
+```{r echo = T, results = 'hide'}
+x<-x4
+x[1:5,1:5]
+
+spop<- c(rep("MOD",length(modern.vec)),rep("MUS",length(museum.vec))) 
+  
+calc_neiFis_multispop <- function (geno, spop) {
+  
+  ## Copyright Eva Chan 2008
+  ## eva@evachan.org
+  ##
+  ## A script to calculate inbreeding coefficients, Fis (Nei 1977 Ann Hum Genet 41:225-233), 
+  ## for each sub-population from a given set of SNP markers.
+  ##
+  ## Input:
+  ## geno: SNP-by-sample matrix of genotypes {0,1,2}; any other values are ignored.
+  ## spop: a factor indicating the sub-population to which the corresponding samples 
+  ##       (columns) in geno belong.
+  ##
+  ## Output: list of 
+  ##         1) aveloc: numeric vector of Fis averaged over all loci for each sub-population, 
+  ##                    the total population (2nd last value),
+  ##                    and average of total population (last value)
+  ##         2) perloc: matrix of Fis per SNP (row) for each sub-population, 
+  ##                    the total population (2nd last column),
+  ##                    and average of total population (last column)
+  
+  ## assign all non {0,1,2} to NA
+  geno[(geno!=0) & (geno!=1) & (geno!=2)] <- NA
+  geno <- as.matrix(geno)
+  
+  m = nrow(geno)   ## number of markers
+  N = ncol(geno)   ## number of samples
+  
+  if( length(spop) != N ) { stop( "Number of samples with genotypes does not match provided number of spop.\n" ) }
+  spop <- as.factor(as.character(spop))
+  unique.spop <- levels(spop)
+  nspop <- length(unique.spop)
+  
+  ## determine numbers of each genotypes for each spop at each locus
+  nNA <- nAA <- nAa <- naa <- matrix(NA, ncol=nspop, nrow=m, dimnames=list(NULL,unique.spop))
+  for(i in 1:nspop) {
+    inds <- which(spop == unique.spop[i])
+    nAA[,i] <- apply(geno[,inds]==0,1,sum,na.rm=T)
+    nAa[,i] <- apply(geno[,inds]==1,1,sum,na.rm=T)
+    naa[,i] <- apply(geno[,inds]==2,1,sum,na.rm=T)
+  }
+  n <- nAA + nAa + naa
+  nAA <- cbind(nAA, total=apply(nAA[,unique.spop],1,sum))
+  nAa <- cbind(nAa, total=apply(nAa[,unique.spop],1,sum))
+  naa <- cbind(naa, total=apply(naa[,unique.spop],1,sum))
+  n <- cbind(n, total=apply(n[,unique.spop],1,sum))
+  
+  Ho <- (nAa/n)                                   ## observed het
+  p <- ((2*nAA)+nAa)/(2*n)                        ## allele freq
+  He <- (n/(n-1)) * ((2*p*(1-p)) - (Ho/(2*n)))    ## Nei's expected het
+  
+  s <- apply(!is.na(n[,unique.spop]),1,sum)        ## number of spop per marker
+  n_tilda <- s/apply((1/n[,unique.spop]),1,sum)    ## harmonic mean of sample sizes
+  Ho <- cbind(Ho, average=(apply(Ho[,unique.spop],1,sum,na.rm=T)/s))   ## Ho averged over samples
+  He <- cbind(He, average=( (n_tilda/(n_tilda-1)) * ((apply(2*p[,unique.spop]*(1-p[,unique.spop]),1,sum,na.rm=T)/s) - (Ho[,"average"]/(2*n_tilda))) ))                                          ## Nei's averaged He
+  
+  ncFis <- 1 - (apply(Ho,2,mean,na.rm=T) / apply(He,2,mean,na.rm=T))
+  ncFis.perloc <- 1 - (Ho/He)
+  
+  #jolene
+  Hobs <- apply(Ho,2,mean,na.rm=T) 
+  Hexp <- apply(He,2,mean,na.rm=T) 
+  Fis.perloc <- 1-(Ho/He)
+  
+  #list(aveloc = ncFis, perloc = ncFis.perloc)
+  list(aveloc = ncFis, HOBS = Hobs, HEXP=Hexp, perloc = ncFis.perloc,FIS=Fis.perloc,HO=Ho,HE=He)
+}
+calc_neiFis_multispop(geno2, spop)
+```
+
+#### Summaries
+```{r echo = T, results = 'show'}
+#calc_neiFis_multispop(geno2, spop) #this will show per locus values per pop and across data
+calc_neiFis_multispop(geno2, spop)[1] #FIS #this will show the average results per pop and across data
+calc_neiFis_multispop(geno2, spop)[2] #HOBS #this will show the average results per pop and across data
+calc_neiFis_multispop(geno2, spop)[3] #HEXP #this will show the average results per pop and across data
+
+summary(calc_neiFis_multispop(geno2, spop)$FIS) #Matches HIERFSTAT unweighted method FIS
+nrow(calc_neiFis_multispop(geno2, spop)$FIS) #sample size
+#summary(calc_neiFis_multispop(geno2, spop)$FIS)[,1] #Matches HIERFSTAT unweighted method FIS
+quantile(calc_neiFis_multispop(geno2, spop)$FIS[,1],c(0.025, 0.975),na.rm=T) #FIS
+quantile(calc_neiFis_multispop(geno2, spop)$FIS[,2],c(0.025, 0.975),na.rm=T) #FIS
+
+summary(calc_neiFis_multispop(geno2, spop)$HO) 
+nrow(calc_neiFis_multispop(geno2, spop)$HO) 
+quantile(calc_neiFis_multispop(geno2, spop)$HO[,1],c(0.025, 0.975),na.rm=T) 
+quantile(calc_neiFis_multispop(geno2, spop)$HO[,2],c(0.025, 0.975),na.rm=T) 
+
+summary(calc_neiFis_multispop(geno2, spop)$HE) ## Nei's averaged He
+nrow(calc_neiFis_multispop(geno2, spop)$HE) ## Nei's averaged He
+quantile(calc_neiFis_multispop(geno2, spop)$HE[,1],c(0.025, 0.975),na.rm=T) ## Nei's averaged He
+quantile(calc_neiFis_multispop(geno2, spop)$HE[,2],c(0.025, 0.975),na.rm=T) ## Nei's averaged He
+```
+
+## PopG Vignettes
+See:  https://popgen.nescent.org/StartSNP.html
+
+### Package `adegenet`
+Convert a data.frame of genotypes to a genind object
+```{r echo = T, results = 'show'}
+#Also need to remove "/" between letters
+#### convert to a “genind” object for package adegenet
+Mydata<-df#df.no.backslash
+locus <- Mydata[, 3:ncol(Mydata)]    
+ind <- as.character(Mydata$Bird) # labels of the individuals
+population <- as.character(Mydata$Group) # labels of the populations
+Mydata1 <- df2genind(locus, ploidy = 2, ind.names = ind, pop = population, sep = "")
+Mydata1
+```
+
+### Package `hierfstat`
+```{r echo = T, results = 'show'}
+Mydata2 <- genind2hierfstat(Mydata1) # Create hierfstat object
+basicstat <- basic.stats(Mydata2, diploid = TRUE, digits = 2) 
+names(basicstat)   
+head(basicstat[[1]]) #n.ind.samples per locus
+head(basicstat[[2]]) #pop.freq
+head(basicstat[[3]]) #observed het, Ho
+head(basicstat[[4]]) # gene diversity, Hs
+head(basicstat[[5]]) #fis
+head(basicstat[[6]])
+head(basicstat[7])
+```
+
+```{r echo = T, results = 'show'}
+summary(basicstat[[3]]) #observed het
+summary(basicstat[[4]]) # gene diversity
+summary(basicstat[[5]]) #fis
+
+boot.ppfis(Mydata2,nboot=1000,quant=c(0.025,0.975),diploid=TRUE,dig=6)
+
+# fis doesn't match 1-(ho/hs) overall; it does per locus, then takes average
+
+############plot Ho by pop
+head(basicstat[[3]]) #observed het, Ho
+head(basicstat$Ho[,1]) #MODERN Ho
+head(basicstat$Ho[,2]) #MUSEUM Ho
+
+#boxplot(basicstat$Ho[,2],las=1)
+#boxplot(basicstat$Ho[,1],las=1)
+boxplot(basicstat$Ho[,2],basicstat$Ho[,1],las=1,ylim=c(0,1),
+        ylab="Observed heterozygosity", xlab="Population")
+mtext(c("Museum","Modern"),side=1,at=c(1,2),line=1)
+```
+
+```{r echo = T, results = 'show'}
+
+```
+<span style="color:red; font-size:2em;"> **MANUSCRIPT TEXT** </span>  
+<br>
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+*Heterozygosity methods*  
+We used the `basic.stats` function in the R package `hierfstat` (Goudet, 2005) to estimate within population observed heterozygosity (*H~o~*), gene diversity (*H~s~*), and inbreeding (*F*~IS~), following Nei (1987). Each statistic was first estimated per locus (per population), so that overall estimates represent the unweighted average of each per locus estimate. We used Wilcoxon rank sum tests (a.k.a. Mann–Whitney U tests) to compare within group *H~o~* and *H~s~* to test for differences in expected and observed heterozygosity, and to compare observed heterozygosity between museum and modern samples. We used the function `boot.ppfis` set to 1000 bootstraps to generate *F*~IS~ 95% confidence intervals.
+</div>
+
+  
+# #######################################################################  
+<hr style="border:1.25px solid gray"> </hr>
+<center>
+<span style="color:gray; font-family:Georgia; font-size:1em; font-style:italic;"> Blanchet G, Bellinger MR, Kearns AM, Cortes-Rodriguez N, Campana MG, Rutz C, Masuda BM, Fleischer RC, and Sutton JT. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; Corvus hawaiiensis) between the late 1800s and the late 1900s. </span>
+</center>
+<br>
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

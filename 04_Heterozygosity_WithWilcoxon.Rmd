@@ -1,0 +1,154 @@
+---
+title: "Blanchet *et al.* 2023, Genotypes file, Exercise 4, Heterozygosity per bird"
+date: "Updated: `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: kable
+    number_sections: no
+---
+
+*******************************************************************
+# Libraries
+```{r libraries,message=FALSE,warning=F}
+library('data.table')
+library('dplyr')
+library('gdata')
+```
+
+********************************************************************
+# Get data
+```{r echo = T, results = 'show',eval=T}
+list.files("data_reformatted/")
+pattern<-"May2022DataFormattedMaxMissing"
+index<-grep(pattern,list.files("data_reformatted/"))
+infile<-paste0("data_reformatted/",list.files("data_reformatted/")[index])     
+     
+     
+df <- read.table(infile, header=TRUE, sep=",", stringsAsFactors=FALSE,na.strings="NA")
+df[1:3,1:5]
+str(df[,1:5]) #check structure
+cols <- c("Bird", "Group") #want Bird and Group to be factors
+df[cols] <- lapply(df[cols], factor)
+str(df[,1:5])
+```
+
+```{r echo = T, results = 'show',eval=T}
+knitr::kable(df[,1:10],caption = 'Showing all rows and 10 columns')
+```
+
+```{r echo = F, results = 'hide'}
+# Create vectors for later use
+modern.vec<-which(df$Group=="Modern")
+museum.vec<-which(df$Group=="Historical")
+num.modern<-length(modern.vec)
+num.museum<-length(museum.vec)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r format(ncol(df)-2,scientific=F,big.mark=",")` loci, and `r format(nrow(df),scientific = F,big.mark=",")` birds. There are `r num.museum` Historical samples, and `r num.modern` Modern samples. Note that information about missing data per bird and per locus is contained in a previous exercise.
+</div>
+
+********************************************************************
+# Choose columns
+It is a good idea to test the code with a subset of the data first
+```{r echo = T, results = 'show',error=TRUE,warning=F}
+#df2<-df[,3:15] # e.g., if testing with a subset
+df2<-df[3:ncol(df)] # e.g, if using the full data set
+df2[1:5,1:2]
+```
+
+# Heterozygosity per bird
+This is simply the proportion of heterozygous loci out of the total loci scored per bird.   
+
+`if` and `ifelse` statements are a bit complicated when there are NAs in the data set. I found a solution on Stack Overflow to avoid getting the error "missing value where TRUE/FALSE needed". Here is the source: https://stackoverflow.com/questions/22076353/how-to-include-na-in-ifelse.   
+```{r echo = T, results = 'show',error=TRUE,warning = FALSE}
+
+datalist2 = list() #for saving output in each iteration of loop
+keep2=list()
+cols<-seq(1,ncol(df2),by=1) #all the  columns
+
+## Loop through data frame and put information in each cell in alphabetical order:
+for (i in seq(cols)) {
+  col<-cols[i] # for each column
+  for(j in 1:nrow(df2)){  # For each row,
+    a<-strsplit(as.character(df2[j,col]) , "") 
+    b<-unlist(a) 
+    c<-if (is.na(b[1])=="TRUE"){ #solution sourced from here:https://stackoverflow.com/questions/22076353/how-to-include-na-in-ifelse
+    'NA'
+      } else if (b[1] == b[2]){
+    '1'
+      } else {
+    '2'
+      } 
+    keep2[j]<-c
+    datalist2[[i]]<-keep2
+}}
+dd<-as.data.frame(matrix(unlist(datalist2),nrow=length(unlist(datalist2[1]))))
+#str(dd)
+dd3<- lapply(dd, function(x) as.numeric(as.character(x)))
+#str(dd3)
+dd4<-as.data.frame(dd3)
+#str(dd4)
+
+het.loci <- rowSums(dd4 > 1, na.rm=T)
+hom.loci <- rowSums(dd4 < 2, na.rm=T)
+tot.loci<-het.loci + hom.loci
+
+dd5<-cbind(dd4,het.loci,hom.loci,tot.loci)
+#str(dd5)
+dd5$heterozygosity<-dd5$het.loci/dd5$tot.loci
+
+row.names(dd5)<-paste(df$Group,df$Bird,sep="-")
+
+dd5[,(ncol(dd5)-3):ncol(dd5)]
+summary(dd5[,(ncol(dd5)-3):ncol(dd5)])
+```
+
+********************************************************************
+# Wilcox
+```{r echo = T, results = 'show',eval=T}
+dat<-as.data.frame(dd5[,(ncol(dd5)-3):ncol(dd5)])
+dat2<-cbind(row.names(dat),dat)
+dat2$Group<-c(rep("Modern",26),rep("Historical",15  ))
+dat2$Group<-as.factor(dat2$Group)
+
+mod<-wilcox.test(dat2$heterozygosity~dat2$Group)
+mod
+mod$statistic
+mod$p.value
+#boxplot(dat[1:26,4],dat[27:nrow(dat),4])
+
+boxplot(dat2$heterozygosity~dat2$Group,las=1)
+```
+
+
+# Export results
+
+```{r echo = T, results = 'show',eval=T}
+
+p2<-gsub('May2022DataFormatted', '', pattern)
+
+outfile<-paste0("data_reformatted/May2022heterozygosity",p2,".csv")
+                
+write.table(dat2, outfile, sep = ",", row.names = F, col.names = TRUE)
+```
+
+  
+  
+  
+  
+  
+# #######################################################################  
+<hr style="border:1.25px solid gray"> </hr>
+<center>
+<span style="color:gray; font-family:Georgia; font-size:1em; font-style:italic;"> Blanchet G, Bellinger MR, Kearns AM, Cortes-Rodriguez N, Campana MG, Rutz C, Masuda BM, Fleischer RC, and Sutton JT. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; Corvus hawaiiensis) between the late 1800s and the late 1900s. </span>
+</center>
+<br>
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

@@ -1,0 +1,143 @@
+---
+title: "Blanchet *et al.* 2023, Genotypes file, Exercise 5, Figures"
+date: "Updated: `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: kable
+    number_sections: no
+---
+
+*******************************************************************
+# Libraries
+```{r libraries,message=FALSE,warning=F}
+library('plyr') #for function `revalue`
+library('ggplot2')
+library('utils')
+```
+
+*****************************************************
+# Plot: Rarefaction
+
+## Before getting started
+Before plotting the rarefaction, you need to run "Blanchet *et al.* 2023, Genotypes file, Exercise 2, Rarefaction analysis" to do the calculations and generate the input file that is used here. It is a good idea to generate different files and plots based setting different numbers of simulations in Exercise 2.
+
+## Get data
+```{r echo = T, results = 'show',eval=T}
+df <- read.table("data_reformatted/Rarefaction1000SimsMeansAndCIs.csv", header=TRUE, sep=",",na.strings="NA")#, stringsAsFactors=FALSE)# the 'stringsAsFactors=FALSE' will make everything chr. 
+names(df)[1]<-"Group"
+str(df)
+df
+```
+
+## Use `ggplot2` to plot
+```{r echo = T, results = 'show',eval=T}
+group.colors <- c(Historical = "#00BFC4", Modern = "#F8766D") #choose colours for each group
+
+p<-ggplot(data=df, aes(x=sampled, y=mean, colour=Group)) +
+  geom_line(aes(linetype=Group, color=Group))+
+  geom_point(aes(shape=Group,color=Group), size=2.25)+
+    #Specify colours:
+  scale_colour_manual(values=group.colors)+
+  scale_fill_manual(values=group.colors)+
+  scale_y_continuous(breaks = seq(0, 20000, 5000), #make sure to leave enough space on axis for all groups and genotypes
+                   limits = c(0,20000), 
+                   expand = c(0,0))+
+  scale_x_continuous(breaks = seq(0, 25, 10), #make sure to leave enough space on axis for all groups and samples
+                   limits = c(0,28), 
+                   expand = c(0,0))+
+  labs(x="Number of individuals sampled", y="Number of genotypes",fill = "Group")+
+  ggtitle('Mean and 95% confidence intervals for the number of genotypes \nrecorded in each group over 1,000 simulations')+
+  theme_bw() +
+  theme(legend.position= c(0.82, 0.25),
+        legend.box.background = element_rect(colour = "black"),
+        axis.text = element_text(colour = 1, size = 10),
+        axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 10, r = 0, b = 0, l = 0)),
+        legend.text=element_text(size=10))+
+  guides(color=guide_legend("Group"))
+  
+        
+p<-p+
+  geom_ribbon(aes(ymin=cl, ymax=cu, fill = Group), linetype=0, alpha=0.2)
+p
+```
+
+*****************************************************
+# Plot: Heterozygosity per bird
+
+## Before getting started
+Before plotting the per bird heterozygosity, you need to run "Blanchet *et al.* 2023, Genotypes file, Exercise 4, Heterozygosity per bird" to do the calculations and generate new files. I calculated heterozygosities using different subsets of genotypes. The I combined the results into a single input file, which I used here. I named this new input file "HetPerBirdCombined.csv".
+
+## Get data
+```{r echo = T, results = 'show',eval=T}
+
+files<-list.files(path="data_reformatted/",pattern ="May2022heterozygosity*")
+
+df1 <- read.table("data_reformatted/May2022heterozygosity25Missing.csv", header=TRUE, sep=",",na.strings="NA", stringsAsFactors=FALSE)#
+df2 <- read.table("data_reformatted/May2022heterozygosity50Missing.csv", header=TRUE, sep=",",na.strings="NA", stringsAsFactors=FALSE)#
+df3 <- read.table("data_reformatted/May2022heterozygosity75Missing.csv", header=TRUE, sep=",",na.strings="NA", stringsAsFactors=FALSE)#
+df4 <- read.table("data_reformatted/May2022heterozygosityMaxMissing.csv", header=TRUE, sep=",",na.strings="NA", stringsAsFactors=FALSE)#
+
+m1<-merge(df1[,c(1,6,5)],df2[,c(1,5)],by="row.names.dat.")
+names(m1)[3:4]<-c('m25','m50')
+m2<-merge(m1,df3[,c(1,5)],by="row.names.dat.")
+names(m2)[5]<-'m75'
+m3<-merge(m2,df4[,c(1,5)],by="row.names.dat.")
+names(m3)<-c('Bird','Group','Het25','Het50','Het75','HetMaxMissing')
+
+(files<-list.files(path="data_reformatted/",pattern ="May2022heterozygosity*"))
+
+df<-do.call(rbind,lapply(list.files(path="data_reformatted/",pattern ="May2022heterozygosity*",full.names = T), read.table, header=TRUE, sep=","))
+
+source<-c(rep('Het25',41),rep('Het50',41),rep('Het75',41),rep('HetMaxMiss',41))
+df<-cbind(source,df)
+df<-df[,c(1,2,7,6)]
+names(df)<-c("source","bird","Group","het")
+
+# change levels of 'source'
+df$source<-as.factor(as.character(df$source))
+levels(df$source)
+df$source <- factor(df$source , 
+                    levels=c("Het25"  ,    "Het50"  ,    "Het75"   ,   "HetMaxMiss"))
+revalue(df$source, c("Het25"="Missing ≤ 25%",
+                      "Het50"="Missing ≤ 50%",
+                      "Het75"="Missing ≤ 75%",
+                      "HetMaxMiss"="Max missing"))-> df$source
+head(df)
+
+
+```
+
+
+## Grouped boxplot
+```{r echo = T, results = 'hold',message=FALSE,eval=T}
+df4<-df
+
+ggplot(df4, aes(x = Group, y = het, color=Group))+
+  scale_colour_manual(values=group.colors)+
+  geom_boxplot(outlier.shape=NA)+
+  geom_point(position=position_jitterdodge())+
+  facet_wrap(~source, ncol = 4)+
+  #Specify colours
+  scale_fill_manual(values=group.colors)+
+  theme_bw()+
+  labs(x="Group", y="Heterozygosity",fill = "Group")+
+  ggtitle('Per bird heterozygosity for each group, allowing for \ndifferent amounts of missing data per locus')+
+  theme(axis.text = element_text(colour = 1, size = 10),
+        axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 10, r = 0, b = 0, l = 0)),
+        legend.position = "none",panel.spacing = unit(0, "lines"))
+```
+
+# #######################################################################  
+<hr style="border:1.25px solid gray"> </hr>
+<center>
+<span style="color:gray; font-family:Georgia; font-size:1em; font-style:italic;"> Blanchet G, Bellinger MR, Kearns AM, Cortes-Rodriguez N, Campana MG, Rutz C, Masuda BM, Fleischer RC, and Sutton JT. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; Corvus hawaiiensis) between the late 1800s and the late 1900s. </span>
+</center>
+<br>
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

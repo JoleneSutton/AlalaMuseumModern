@@ -1,0 +1,317 @@
+---
+title: "Blanchet *et al.* 2023, Genotypes file, Exercise 1, Format input file"
+date: "Updated: `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: kable
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*****************************************************
+# Libraries  
+```{r libraries,message=FALSE,warning=FALSE}
+library('data.table')
+library('dplyr')
+library('gdata')
+```
+*****************************************************
+# Overview & details of input file
+
+**Overview:**  
+
+  * This pipeline formats the "table of hard genotype calls" data file for downstream analyses (*e.g.,* rarefaction). 
+  * The table of genotypes was created from the genotype likelihood file using filters described in the manuscript.
+  * The table of genotypes file is called "p12.1e4.wFeps1e5.unlnk.geno.p9.geno.txt"Missing genotypes are denoted as "NN".
+
+**This pipeline will:**  
+
+  1. Transpose data frame so that rows are birds and columns are loci.
+  1. Add bird identifiers and group (historical vs modern) metadata.
+  1. Ensure that genotypes are consistently in alphabetical order.
+  1. Provide general data summaries for missing data, and loci polymorphism.
+  1. Create new genotype data files for downstream analysis. New files are created and saved to a folder called "data_reformatted".
+
+********************************************************************
+# Get data
+There are no column labels. Locus names are not read-in. For each genotype, both alleles are in a single column with no delimiter. Columns are birds, rows are loci. Remove "NN" from the missing data columns. 
+
+```{r echo = T, results = 'show'}
+df  <- fread('data_may2022/p12.1e4.wFeps1e5.unlnk.geno.9.geno.txt', select = c(3:43), header=F, sep="\t", stringsAsFactors=FALSE) #select the 41 columns of bird genotypes
+
+df[df == "NN"] <- "" #optional. change "NN" to empty cell
+df[1:5,1:25] # show first 5 rows and 25 columns
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r ncol(df)` birds (columns), and `r format(nrow(df),scientific = F,big.mark=",")` loci (rows).
+</div>
+********************************************************************
+# Transpose dataframe
+And add temporary bird and locus names.
+```{r echo = T, results = 'hold'}
+df <- as.data.frame(t(as.matrix(df))) #transpose
+names(df)<-paste("locus",seq(1:ncol(df)),sep="_")
+row.names(df)<-paste("bird",seq(1:nrow(df)),sep="_")
+df[1:4,1:12] #first 4 rows and 12 columns
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r format(ncol(df),scientific = F,big.mark=",")` loci (columns), and `r format(nrow(df),scientific = F,big.mark=",")` birds (rows).
+</div>
+
+********************************************************************
+# Add bird and group IDs.
+Read in a new file with this information. **The order of samples in this file matches the order of birds in the genotype file. **
+
+  * Column 1 is the name of the BAM file
+  * Column 2 is the bird ID. For Modern birds, the format is "library_studbook_name". All Historical bird names begin with "RCF".
+  * Column 3 is the group that each bird belongs to ("Historical" or "Modern").
+      
+```{r echo = T, results = 'show'}
+birds <- read.table('data_may2022/p12sampleIDs.csv', header=TRUE, sep=",",na.strings='.', stringsAsFactors=FALSE) #remove the periods
+```
+
+```{r echo = F, results = 'hold'}
+knitr::kable(birds[1:6,],caption = 'Showing the first 6 rows and 6 columns of the dataframe')
+```
+
+Combine information
+```{r echo = T, results = 'hold',eval=T}
+Group<-birds$GROUP
+Bird<-birds$BIRD
+df<-cbind(Bird,Group, df)
+df[,1:10]
+```
+   
+```{r echo = F, results = 'hide'}
+modern.vec<-which(df$Group=="Modern")
+museum.vec<-which(df$Group=="Historical,")
+num.modern<-length(modern.vec)
+num.museum<-length(museum.vec)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r length(which(df$Group=="Modern"))` Modern samples and `r length(which(df$Group=="Historical"))` Historical samples.
+</div>
+********************************************************************   
+# Ensure genotype calls are consistent
+*E.g.* alphabetical order. I just looped through each cell and sorted the nucleotides alphabetically. I also put "NA" into the empty cells so that I can easily use the function `is.na` in the next step Because there are many columns to loop through, this took about 4-5 minutes on my desktop.
+```{r echo = T, results = 'hold',eval=T}
+x<-df[,-c(1:2)] #only work with the genotype columns
+datalist2 = list() #for saving output in each iteration of loop
+keep2=list()
+cols<-seq(1,ncol(x),by=1) #all the  columns
+
+## Loop through data frame and put information in each cell in alphabetical order:
+for (i in seq(cols)) {
+  col<-cols[i] # for each column
+  for(j in 1:nrow(x)){  # For each row in 'x',
+    a<-strsplit(as.character(x[j,col]) , "") 
+    b<-unlist(a)
+    keep2[j]<-paste(sort(b), collapse = '') 
+    datalist2[[i]]<-keep2
+}}
+dd<-as.data.frame(matrix(unlist(datalist2), nrow=length(unlist(datalist2[1]))))
+dd<-drop.levels(dd)
+df2<-cbind.data.frame(df[,1:2],dd)
+names(df2)<-names(df) 
+df3<- df2 %>% mutate_all(na_if,"")
+df<-df3
+```
+
+```{r echo = F, results = 'hold',eval=T}
+knitr::kable( df[,1:12] ,caption = 'Showing the first 12 columns')
+```
+********************************************************************
+# Check polymorphism
+For each locus column, I split the cell then tallied the number of unique bases.  I then asked for the number of loci with <2 bases.
+```{r echo = T, results = 'hide'}
+x1<-df[,3:ncol(df)]
+loci<-seq(1,ncol(x1),by=1) #every column
+datalist = list() #for saving output in each iteration of loop
+
+for (i in seq(loci)) {
+  keep<-unlist(strsplit(as.character(x1[,i]),"",fixed=TRUE))
+  count<-length(unique(keep[!is.na(keep)]))
+  datalist[[i]]<-count
+}
+x2<-c(unlist(datalist))
+num.loci<-length(x2) #number of loci
+num.alleles<-sum(x2) # number of unique alleles in dataset
+(mono<-which(x2<2)) # if any monomorphic 
+(tri<-which(x2>2)) # more than 2 alleles ?
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r format(length(x2),scientific = F,big.mark=",")` loci and `r format(sum(x2),scientific = F,big.mark=",")` alleles. There are `r length(mono)` monomorphic loci. There are `r format(length(tri),scientific = F,big.mark=",")` loci with more than two alleles.  
+</div>
+
+## Remove monomorphic loci
+```{r echo = T, results = 'hide'}
+(num.poly<-num.loci-length(mono))
+poly<-x1[,-c(mono)]
+ncol(x1)
+ncol(poly)
+x3<-cbind(df[,1:2],poly)
+x3[1:3,1:6]
+df<-x3
+```
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: After removing the monomorphic loci, there are `r format(ncol(df[,3:ncol(df)]),scientific = F,big.mark=",")` loci remaining.
+</div>
+
+********************************************************************
+# Check missing data
+```{r echo = F, results = 'hide'}
+(n.birds<-nrow(df))
+(n.loci<-ncol(df[,3:ncol(df)]))
+```
+
+## Per bird
+```{r echo = T, results = 'show'}
+missing.bird<-rowSums(mapply(is.na, df[,3:ncol(df)])) #counts occurrences of specific string or value  #useful for omitting columns/rows with proportions of missing data
+prop.missing.bird<-missing.bird/ncol(df[,3:ncol(df)])
+output<-as.data.frame(cbind(summary(prop.missing.bird) ))
+names(output)<-"Proportion missing per bird"
+bird.missing.data<-cbind.data.frame(df$Bird,prop.missing.bird)
+bird.missing.data[order(prop.missing.bird,decreasing = TRUE),] 
+```
+
+```{r echo = F, results = 'show'}
+knitr::kable(output,align = 'l',caption = 'Summary of the amount of missing data per bird')
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There is a mean of `r mean(prop.missing.bird)` missing data per bird with a standard deviation of `r sd(prop.missing.bird)`.
+</div>
+
+## Per locus
+```{r echo = T, results = 'show'}
+missing.loci<-colSums(mapply(is.na, df[,3:ncol(df)])) 
+prop.loci<-missing.loci/nrow(df[,3:ncol(df)])
+output<-as.data.frame(cbind(summary(prop.loci) ))
+names(output)<-"Proportion missing per locus"
+```
+
+```{r echo = F, results = 'show'}
+knitr::kable(output,align = 'l',caption = 'Summary of the amount of missing data per locus')
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There is a mean of `r mean(prop.loci)` missing data per locus with a standard deviation of `r sd(prop.loci)`. 
+</div>
+
+## Per locus per population
+```{r echo = T, results = 'show'}
+museum.df<-subset (df, df$Group == "Historical") #subset by group
+modern.df<-subset (df, df$Group == "Modern") #subset by group
+
+missing.loci.museum<-colSums(mapply(is.na, museum.df[,3:ncol(museum.df)])) 
+prop.loci.museum<-missing.loci.museum/nrow(museum.df[,3:ncol(museum.df)])
+output1<-as.data.frame(cbind(summary(prop.loci.museum) ))
+names(output1)<-"Proportion missing per locus"
+
+missing.loci.modern<-colSums(mapply(is.na, modern.df[,3:ncol(modern.df)])) 
+prop.loci.modern<-missing.loci.modern/nrow(modern.df[,3:ncol(modern.df)])
+output2<-as.data.frame(cbind(summary(prop.loci.modern) ))
+names(output2)<-"Proportion missing per locus"
+```
+
+```{r echo = F, results = 'show'}
+knitr::kable(output1,align = 'l',caption = 'Summary of the amount of missing data per locus in Historical samples')
+knitr::kable(output2,align = 'l',caption = 'Summary of the amount of missing data per locus in Modern samples')
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: In the Historical group, the mean missing data per locus is `r mean(prop.loci.museum)` with a standard deviation of `r sd(prop.loci.museum)`. In the Modern group, the mean missing data per locus is `r mean(prop.loci.modern)` with a standard deviation of `r sd(prop.loci.modern)`.
+</div>
+
+********************************************************************
+# Create data subsets
+Create subsets of the data frame based on different missing data thresholds. Then write these to file for individual analysis.
+
+Thresholds to compare:  
+
+  * loci with ≤ 25% missing data
+  * loci with ≤ 50% missing data
+  * loci with ≤ 75% missing data
+
+```{r echo = T, results = 'show'}
+threshold1<-which(prop.loci<=0.25) # loci with ≤ 25% missing data
+threshold2<-which(prop.loci<=0.50) # loci with ≤ 50% missing data
+threshold3<-which(prop.loci<=0.75) # loci with ≤ 75% missing data
+
+x<-df[,-c(1:2)]
+x[1:4,1:3]
+
+threshold1.df<-x[,c(threshold1)]
+threshold1.df<-cbind(Bird,Group,threshold1.df)
+
+threshold2.df<-x[,c(threshold2)]
+threshold2.df<-cbind(Bird,Group,threshold2.df)
+
+threshold3.df<-x[,c(threshold3)]
+threshold3.df<-cbind(Bird,Group,threshold3.df)
+
+threshold1.df[1:4,1:3]
+threshold2.df[1:4,1:3]
+threshold3.df[1:4,1:3]
+```
+
+********************************************************************
+# Export results
+```{r echo = T, results = 'show'}
+write.table(df, 'data_reformatted/May2022DataFormattedMaxMissing.csv', sep = ",", row.names = F, col.names = TRUE, quote = F)
+write.table(threshold1.df, 'data_reformatted/May2022DataFormatted25Missing.csv', sep = ",", row.names = F, col.names = TRUE, quote = F)
+write.table(threshold2.df, 'data_reformatted/May2022DataFormatted50Missing.csv', sep = ",", row.names = F, col.names = TRUE, quote = F)
+write.table(threshold3.df, 'data_reformatted/May2022DataFormatted75Missing.csv', sep = ",", row.names = F, col.names = TRUE, quote = F)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**:    
+
+  * Number of loci with ≤ 25% missing data = `r format(length(threshold1),scientific = F,big.mark=",")`
+  * Number of loci with ≤ 50% missing data = `r format(length(threshold2),scientific = F,big.mark=",")`
+  * Number of loci with ≤ 75% missing data = `r format(length(threshold3),scientific = F,big.mark=",")`
+  * Number of loci without missing data restrictions = `r format(ncol(x),scientific = F,big.mark=",")`. The maximum amount of missing data per locus in this data set is `r max(prop.loci)`.
+</div>
+
+
+  
+# #######################################################################  
+<hr style="border:1.25px solid gray"> </hr>
+<center>
+<span style="color:gray; font-family:Georgia; font-size:1em; font-style:italic;"> Blanchet G, Bellinger MR, Kearns AM, Cortes-Rodriguez N, Campana MG, Rutz C, Masuda BM,Fleischer RC, and Sutton JT. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; Corvus hawaiiensis) between the late 1800s and the late 1900s. </span>
+</center>
+<br>
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

@@ -1,0 +1,121 @@
+---
+title: "Blanchet *et al.* 2023, Genotypes file, Exercise 2, Rarefaction analysis"
+date: "Updated: `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: kable
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*****************************************************
+# Libraries
+```{r libraries,message=FALSE,warning=FALSE}
+library('data.table')
+library('dplyr')
+library('gdata')
+```
+
+********************************************************************
+# Get data
+```{r echo = T, results = 'show',eval=T}
+df <- read.table("data_reformatted/May2022DataFormattedMaxMissing.csv", header=TRUE, sep=",",na.strings="NA", stringsAsFactors=FALSE)
+str(df[,1:5]) #check structure
+cols <- c("Bird", "Group") #want Bird and Group to be factors
+df[cols] <- lapply(df[cols], factor)
+str(df[,1:5])
+```
+
+```{r echo = T, results = 'show',eval=T}
+knitr::kable(df[,1:10],caption = 'Showing all rows and 10 columns')
+```
+
+```{r echo = F, results = 'hide'}
+# Create vectors for later use
+modern.vec<-which(df$Group=="Modern")
+museum.vec<-which(df$Group=="Historical")
+num.modern<-length(modern.vec)
+num.museum<-length(museum.vec)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+**RESULTS**: There are `r format(ncol(df)-2,scientific=F,big.mark=",")` loci, and `r format(nrow(df),scientific = F,big.mark=",")` birds. There are `r num.museum` Historical samples, and `r num.modern` Modern samples. Note that information about missing data per bird and per locus is contained in the previous exercise.
+</div>
+
+********************************************************************
+# Rarefaction
+The next chunk will generated a table of results and write them to file which will be used for creating the plots. Plots are NOT included here.   
+
+**Set the number of simulations ("n.sim") to use in the loop in the next code chunk.** I suggest testing with a very small number, because the loop below takes a long time to run.
+```{r echo = T, results = 'show'}
+n.sim<-1000 #to shuffle rows in simulation (to generate 95% CIs etc): 
+```
+
+```{r echo = T, results = 'show'}
+x<-df                  
+datalist = list() #for saving output in each iteration of loop
+results<-data.frame() # to store final output of all iterations through loop
+
+n.sim<-n.sim #to shuffle rows in simulation (to generate 95% CIs etc)
+
+set.seed(3879)
+
+start<-Sys.time() # This loop takes a long time to complete
+for(s in 1:n.sim){ # this part of the loop is for running simulations. 
+  x<-x[sample(nrow(x)),]
+  for (i in levels(x$Group)){
+    data = subset (x, x$Group == i) #subset by group
+    test<-data[,-c(1:2)] #remove columns
+    out <- array(NA, c(nrow(test), 3)) #This makes an array for storing the results
+    for(j in 1:nrow(test)){  # For each row in 'x',
+      test2<-test[1:j,] #subset by rows 1:i
+      keep<-sum(apply(test2, 2, function(x)length(unique(na.omit(x))))) # omit NA values when summing
+      out[j,1]<-i
+      out[j,2]<-j
+      out[j,3]<-keep
+      datalist[[i]] <- out #good
+    }
+    results <- rbind(results, datalist[[i]])  
+  }}
+(tot.time<-Sys.time()-start)
+
+
+str(results)
+head(results)
+names(results)<-c("group","num.sampled","num.var")
+res<-results
+res[,2:3] <- lapply(results[,2:3], function(x) as.numeric(as.character(x)))       
+
+px = aggregate(res$num.var, list(res$group,res$num.sampled), mean) #mean
+cilx = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.025) # lower 95% CI
+ciux = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.975) # upper 95% CI
+
+new.res<-cbind.data.frame(px,cilx[,3],ciux[,3])
+names(new.res)<-c("group","sampled","mean","cl","cu")
+new.res
+```
+
+********************************************************************
+# Export results
+```{r echo = T, results = 'show'}
+outfile<-paste("data_reformatted/Rarefaction",n.sim,"SimsMeansAndCIs.csv",sep="")
+write.table(new.res, outfile, sep = ",", row.names = F, col.names = TRUE, quote = F)
+```
+
+# #######################################################################  
+<hr style="border:1.25px solid gray"> </hr>
+<center>
+<span style="color:gray; font-family:Georgia; font-size:1em; font-style:italic;"> Blanchet G, Bellinger MR, Kearns AM, Cortes-Rodriguez N, Campana MG, Rutz C, Masuda BM,Fleischer RC, and Sutton JT. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; Corvus hawaiiensis) between the late 1800s and the late 1900s. </span>
+</center>
+<br>
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
