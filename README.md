@@ -11,3 +11,4 @@ This repository houses the R code for the project: Blanchet G, Bellinger MR, Kea
 
 - 04_Heterozygosity_WithWilcoxon.Rmd compares heterozygosity among loci between historical and modern samples, and compares heterozygosity per bird between historical and modern samples.
 
+- 05_Figures.Rmd  generates the rarefaction figure and the boxplots of per-bird heterozygosities.
