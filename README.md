@@ -7,7 +7,7 @@ This repository houses the R code for the project: Blanchet G, Bellinger MR, Kea
 
 - 02_Rarefaction_vMoreSimulations.Rmd performs the rarefaction. We randomly sampled one bird from each group (historical or modern) and counted the number of unique genotypes, then successively sampled each of the remaining individuals and recorded the number of new genotypes added each time until every individual per group had been sampled. We used 1,000 permutations of the sampling strategy, shuffling the order of samples during each permutation.
 
-- 03_PolymorphicLoci_PrivateAlleles_AlleleFrequencies.Rmd compares the proportion of polymorphic loci and allelic richness (number of alleles) between historical and modern samples. To account for differences in sample sizes when comparing the proportions of polymorphic loci, used permutation by randomly sampling a subset of modern birds over a specified number of permutations to generate means and 95% confidence intervals.
+- 03_PolymorphicLoci_PrivateAlleles_AlleleFrequencies.Rmd compares the proportion of polymorphic loci and allelic richness (number of alleles) between historical and modern samples. To account for differences in sample sizes when comparing the proportions of polymorphic loci, we used permutation by randomly sampling a subset of modern birds over a specified number of permutations to generate means and 95% confidence intervals.
 
 - 04_Heterozygosity_WithWilcoxon.Rmd compares heterozygosity among loci between historical and modern samples, and compares heterozygosity per bird between historical and modern samples.
 
