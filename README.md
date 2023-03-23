@@ -14,3 +14,6 @@ This repository houses the R code for the project: Blanchet G, Bellinger MR, Kea
 - 05_Figures.Rmd  generates the rarefaction figure and the boxplots of per-bird heterozygosities.
 
 - boxplots_kinship_analysis.R creates the boxplot of pairwise kinship values between historical and modern samples
+
+## Citation
+Blanchet et al. 2023. Reduction of genetic diversity in ‘Alalā (Hawaiian crow; *Corvus hawaiiensis*) between the late 1800s and the late 1900s. In Prep.
