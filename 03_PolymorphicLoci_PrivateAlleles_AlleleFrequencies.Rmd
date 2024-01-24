@@ -22,6 +22,8 @@ library('gdata')
 library('adegenet')
 library('hierfstat')
 library('car')
+library('Rmisc')
+
 ```
 
 ********************************************************************
@@ -149,11 +151,13 @@ head(TotalPolymorphic)
 ####### Mean and 95% CIs for each group
 #mean and 95% CI for one group (Museum)
 mean(TotalPolymorphic[,1])
-quantile(TotalPolymorphic[,1], c(0.025, 0.975))
+#quantile(TotalPolymorphic[,1], c(0.025, 0.975))
+CI(TotalPolymorphic[,1])
 
 #mean and 95% CI for other group (Modern)
 mean(TotalPolymorphic[,2])
-quantile(TotalPolymorphic[,2], c(0.025, 0.975))
+#quantile(TotalPolymorphic[,2], c(0.025, 0.975))
+CI(TotalPolymorphic[,2])
 # compare these values to actual data
 ```
 <style>
@@ -165,10 +169,10 @@ div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
   * The number of simulations used: `r n.sims`
   * Historical results were: 
       * Mean: `r mean(TotalPolymorphic[,1])`
-      * 95% CIs: `r quantile(TotalPolymorphic[,1], c(0.025, 0.975))`
+      * 95% CIs: `r CI(TotalPolymorphic[,1])`
   * Modern results were:
     * mean: `r mean(TotalPolymorphic[,2])`
-    * 95% CIs: `r quantile(TotalPolymorphic[,2], c(0.025, 0.975))`
+    * 95% CIs: `r CI(TotalPolymorphic[,2])`
   * Note that museum output should be exact match to unsimulated output from above and that the lower and upper confidence intervals should be the same.
 </div>
 
@@ -315,10 +319,12 @@ n.sims
 
 #mean and 95% CI for museum
 mean(PrivateAlleles[,3])
-quantile(PrivateAlleles[,3], c(0.025, 0.975))
+#quantile(PrivateAlleles[,3], c(0.025, 0.975))
+CI(PrivateAlleles[,3])
 #mean and 95% CI for other group
 mean(PrivateAlleles[,4])
-quantile(PrivateAlleles[,4], c(0.025, 0.975))
+#quantile(PrivateAlleles[,4], c(0.025, 0.975))
+CI(PrivateAlleles[,4])
 # compare these values to actual data
 ```
 <span style="color: red;">**Results: ** </span>  
@@ -326,10 +332,10 @@ quantile(PrivateAlleles[,4], c(0.025, 0.975))
   * The number of simulations used: `r n.sims`
   * Museum results were: 
       * Mean: `r mean(PrivateAlleles[,3])`
-      * 95% CIs: `r quantile(PrivateAlleles[,3], c(0.025, 0.975))`
+      * 95% CIs: `r CI(PrivateAlleles[,3])`
   * Modern results were:
     * mean: `r mean(PrivateAlleles[,4])`
-    * 95% CIs: `r quantile(PrivateAlleles[,4], c(0.025, 0.975))`
+    * 95% CIs: `r quantile(CI(PrivateAlleles[,4]))`
 
 
 
@@ -341,12 +347,13 @@ quantile(PrivateAlleles[,4], c(0.025, 0.975))
 a<-PrivateAlleles[,3]
 b<-PrivateAlleles[,4]
 
-overlaps<-quantile(a, c(0.025, 0.975))%overlaps%quantile(b, c(0.025, 0.975))
+overlaps<-CI(a)[c(3,1)]%overlaps%CI(b)[c(3,1)]
+
 overlaps
 
 condition1<-mean(a)>mean(b) & overlaps!=TRUE
 condition2<-mean(a)<mean(b) & overlaps!=TRUE
-condition3<-quantile(a, c(0.025, 0.975))%overlaps%quantile(b, c(0.025, 0.975))
+condition3<-CI(a)[c(3,1)]%overlaps%CI(b)[c(3,1)]
 condition1
 condition2
 condition3
@@ -364,7 +371,7 @@ div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
 To assess bottleneck impacts, we compared diversity metrics between museum and modern samples. When comparing proportions of polymorphic loci and private alleles, we used permutations to address differences between museum and modern sample sizes. We randomly sampled `r length(museum.vec)` modern birds for `r n.sims` permutations to generate means and 95% confidence intervals, and compared these values to our `r length(museum.vec)` museum samples. If there was no overlap between the modern samples' permuted 95% confidence intervals and the museum estimates, we considered the values to be significantly different from one another.
 
 *Private alleles results*  
-A total of `r format(total.alleles,big.mark=",",scientific = F)`  alleles were retained from `r format(num.loci,big.mark=",",scientific = F)` loci, of which `r format(total.alleles-private.museum.not.permuted-private.modern.not.permuted,big.mark=",",scientific = F)` (`r ((total.alleles-private.museum.not.permuted-private.modern.not.permuted)/total.alleles)*100`%) were shared between museum and modern samples. When we accounted for sample size differences, the mean proportion of private alleles in our `r length(museum.vec)` museum samples `r ifelse(condition1=="TRUE", p1, ifelse(condition2=="TRUE", p2, p3))` `r length(museum.vec)` randomly sampled modern birds after `r n.sims` permutations (museum: mean = `r mean(PrivateAlleles[,3])`, 95% CIs = `r quantile(PrivateAlleles[,3], c(0.025, 0.975))`; modern: mean =`r mean(PrivateAlleles[,4])`, 95% CIs = `r quantile(PrivateAlleles[,4], c(0.025, 0.975))`).
+A total of `r format(total.alleles,big.mark=",",scientific = F)`  alleles were retained from `r format(num.loci,big.mark=",",scientific = F)` loci, of which `r format(total.alleles-private.museum.not.permuted-private.modern.not.permuted,big.mark=",",scientific = F)` (`r ((total.alleles-private.museum.not.permuted-private.modern.not.permuted)/total.alleles)*100`%) were shared between museum and modern samples. When we accounted for sample size differences, the mean proportion of private alleles in our `r length(museum.vec)` museum samples `r ifelse(condition1=="TRUE", p1, ifelse(condition2=="TRUE", p2, p3))` `r length(museum.vec)` randomly sampled modern birds after `r n.sims` permutations (museum: mean = `r mean(PrivateAlleles[,3])`, 95% CIs = `r CI(PrivateAlleles[,3]`; modern: mean =`r mean(PrivateAlleles[,4])`, 95% CIs = `r CI(PrivateAlleles[,4]`).
 </div>
 
 ********************************************************************
@@ -645,16 +652,24 @@ nrow(calc_neiFis_multispop(geno2, spop)$FIS) #sample size
 #summary(calc_neiFis_multispop(geno2, spop)$FIS)[,1] #Matches HIERFSTAT unweighted method FIS
 quantile(calc_neiFis_multispop(geno2, spop)$FIS[,1],c(0.025, 0.975),na.rm=T) #FIS
 quantile(calc_neiFis_multispop(geno2, spop)$FIS[,2],c(0.025, 0.975),na.rm=T) #FIS
+CI(calc_neiFis_multispop(geno2, spop)$FIS[,1]) #FIS
+CI(calc_neiFis_multispop(geno2, spop)$FIS[,2]) #FIS
+
 
 summary(calc_neiFis_multispop(geno2, spop)$HO) 
 nrow(calc_neiFis_multispop(geno2, spop)$HO) 
 quantile(calc_neiFis_multispop(geno2, spop)$HO[,1],c(0.025, 0.975),na.rm=T) 
 quantile(calc_neiFis_multispop(geno2, spop)$HO[,2],c(0.025, 0.975),na.rm=T) 
+CI(calc_neiFis_multispop(geno2, spop)$HO[,1]) 
+CI(calc_neiFis_multispop(geno2, spop)$HO[,2]) 
 
 summary(calc_neiFis_multispop(geno2, spop)$HE) ## Nei's averaged He
 nrow(calc_neiFis_multispop(geno2, spop)$HE) ## Nei's averaged He
 quantile(calc_neiFis_multispop(geno2, spop)$HE[,1],c(0.025, 0.975),na.rm=T) ## Nei's averaged He
 quantile(calc_neiFis_multispop(geno2, spop)$HE[,2],c(0.025, 0.975),na.rm=T) ## Nei's averaged He
+CI(calc_neiFis_multispop(geno2, spop)$HE[,1]) ## Nei's averaged He
+CI(calc_neiFis_multispop(geno2, spop)$HE[,2]) ## Nei's averaged He
+
 ```
 
 ## PopG Vignettes

@@ -22,6 +22,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library('data.table')
 library('dplyr')
 library('gdata')
+library('Rmisc')
 ```
 
 ********************************************************************
@@ -97,10 +98,12 @@ res<-results
 res[,2:3] <- lapply(results[,2:3], function(x) as.numeric(as.character(x)))       
 
 px = aggregate(res$num.var, list(res$group,res$num.sampled), mean) #mean
-cilx = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.025) # lower 95% CI
-ciux = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.975) # upper 95% CI
+quantl = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.025) # lower quantile 
+quantu = aggregate(res$num.var, list(res$group,res$num.sampled), quantile, p=0.975) # upper quantile 
+cilx = do.call(cbind.data.frame,aggregate(res$num.var, list(res$group,res$num.sampled), CI))$x.lower # lower 95% CI
+ciux = do.call(cbind.data.frame,aggregate(res$num.var, list(res$group,res$num.sampled), CI))$x.upper # upper 95% CI
 
-new.res<-cbind.data.frame(px,cilx[,3],ciux[,3])
+new.res<-cbind.data.frame(px,cilx,ciux)
 names(new.res)<-c("group","sampled","mean","cl","cu")
 new.res
 ```
